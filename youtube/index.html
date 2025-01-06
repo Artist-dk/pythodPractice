@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text-to-Speech with MP3 Download</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        textarea {
+            width: 80%;
+            height: 100px;
+            margin-bottom: 20px;
+        }
+        select, button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Text-to-Speech with MP3 Download</h1>
+
+    <textarea id="text-input" placeholder="Enter text here..."></textarea><br>
+
+    <label for="language-select">Select Language:</label>
+    <select id="language-select">
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="hi-IN">Hindi</option>
+        <option value="es-ES">Spanish</option>
+        <option value="fr-FR">French</option>
+        <option value="de-DE">German</option>
+    </select><br>
+
+    <label for="speed-select">Select Speed:</label>
+    <select id="speed-select">
+        <option value="1">Normal</option>
+        <option value="0.5">Slow</option>
+        <option value="1.5">Fast</option>
+    </select><br>
+
+    <button id="convert-button">Convert to Speech</button>
+    <button id="download-button" disabled>Download MP3</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.10.0/dist/ffmpeg.min.js"></script>
+    <script>
+        const textInput = document.getElementById("text-input");
+        const languageSelect = document.getElementById("language-select");
+        const speedSelect = document.getElementById("speed-select");
+        const convertButton = document.getElementById("convert-button");
+        const downloadButton = document.getElementById("download-button");
+
+        let audioBlob = null;
+
+        const synth = window.speechSynthesis;
+
+        // Function to handle text-to-speech
+        const convertToSpeech = () => {
+            const text = textInput.value.trim();
+            const speed = parseFloat(speedSelect.value);
+            const language = languageSelect.value;
+
+            if (!text) {
+                alert("Please enter some text to convert!");
+                return;
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = language;
+            utterance.rate = speed;
+
+            const audioContext = new AudioContext();
+            const destination = audioContext.createMediaStreamDestination();
+            const mediaRecorder = new MediaRecorder(destination.stream);
+
+            // Connect the speech synthesis to the media recorder
+            const source = audioContext.createMediaStreamSource(destination.stream);
+            source.connect(audioContext.destination);
+
+            synth.speak(utterance);
+
+            mediaRecorder.ondataavailable = (e) => {
+                audioBlob = e.data;
+                convertToMP3(audioBlob); // Convert to MP3 after capturing audio
+            };
+
+            mediaRecorder.start();
+
+            utterance.onend = () => {
+                mediaRecorder.stop();
+            };
+        };
+
+        // Convert audio blob to MP3 using ffmpeg.js
+        const convertToMP3 = async (blob) => {
+            const { createFFmpeg, fetchFile } = FFmpeg;
+            const ffmpeg = createFFmpeg({ log: true });
+
+            await ffmpeg.load();
+
+            // Write input WAV file
+            ffmpeg.FS('writeFile', 'input.wav', await fetchFile(blob));
+
+            // Convert WAV to MP3
+            await ffmpeg.run('-i', 'input.wav', 'output.mp3');
+
+            // Read output MP3 file
+            const mp3Data = ffmpeg.FS('readFile', 'output.mp3');
+
+            // Create Blob from MP3 data
+            const mp3Blob = new Blob([mp3Data.buffer], { type: 'audio/mp3' });
+            const url = URL.createObjectURL(mp3Blob);
+
+            // Enable the download button
+            downloadButton.disabled = false;
+            downloadButton.onclick = () => {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'output_audio.mp3';
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+        };
+
+        // Event listeners
+        convertButton.addEventListener("click", convertToSpeech);
+    </script>
+</body>
+</html>
